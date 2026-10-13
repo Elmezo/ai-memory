@@ -1,0 +1,16 @@
+﻿{
+  "mappings": {
+    "properties": {
+      "memory_id":  { "type": "keyword" },
+      "agent_id":   { "type": "keyword" },
+      "user_id":    { "type": "keyword" },
+      "tenant_id":  { "type": "keyword" },
+      "type":       { "type": "keyword" },
+      "content":    { "type": "text" },
+      "importance": { "type": "float" },
+      "confidence": { "type": "float" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" }
+    }
+  }
+}
