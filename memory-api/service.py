@@ -10,8 +10,9 @@ from uuid import uuid4
 from config import settings
 from embeddings import EmbeddingProvider
 from models import MemoryInput, MemorySearch, MemoryUpdate
+from reranker import get_reranker
 from store import StoreError, map_es_error
-from textutil import is_trivial, jaccard, normalize_text
+from textutil import clean_conversational_query, is_trivial, jaccard, normalize_text
 
 log = logging.getLogger("memory.service")
 
@@ -390,6 +391,14 @@ class MemoryService:
         if not query_text:
             raise StoreError(422, "Search query is empty")
         limit = max(1, min(params.limit, settings.MAX_LIMIT))
+
+        # Query Expansion & Conversational Normalization
+        cleaned_query = (
+            clean_conversational_query(query_text)
+            if settings.QUERY_EXPANSION_ENABLED
+            else query_text
+        )
+
         filters = self._scope_filters(
             params.tenant_id, params.user_id, params.agent_id, params.project_id
         )
@@ -401,9 +410,21 @@ class MemoryService:
             str(params.type.value) if params.type else None,
         )
 
+        # Keyword matching: prioritize cleaned keywords, fallback to raw query
+        match_clauses: list[dict[str, Any]] = [
+            {"match": {"content": {"query": cleaned_query, "boost": 1.5}}}
+        ]
+        if cleaned_query != query_text:
+            match_clauses.append({"match": {"content": {"query": query_text, "boost": 1.0}}})
+
         keyword_query: dict[str, Any] = {
-            "bool": {"must": [{"match": {"content": query_text}}], "filter": filters}
+            "bool": {
+                "should": match_clauses,
+                "minimum_should_match": 1,
+                "filter": filters,
+            }
         }
+
         # Importance / confidence / recency ranking on top of BM25.
         if settings.BOOST_IMPORTANCE or settings.BOOST_CONFIDENCE or settings.BOOST_RECENCY:
             functions: list[dict[str, Any]] = []
@@ -445,8 +466,16 @@ class MemoryService:
                 }
             }
 
+        # Candidate limit for Reranker (fetch more candidates to re-rank top_k)
+        candidate_limit = (
+            max(limit, settings.RERANK_TOP_K)
+            if settings.RERANKER_ENABLED
+            else limit
+        )
+
         knn: dict[str, Any] | None = None
         semantic_warning: str | None = None
+        vector = None
         if params.mode in {"semantic", "hybrid"}:
             vector = self._embed_or_none(query_text)
             if vector is None:
@@ -459,57 +488,100 @@ class MemoryService:
                 knn = {
                     "field": "embedding",
                     "query_vector": vector,
-                    "k": min(limit * 2, 50),
-                    "num_candidates": 100,
+                    "k": candidate_limit,
+                    "num_candidates": max(candidate_limit * 2, 50),
                     "filter": {"bool": {"filter": filters}},
                 }
                 if params.mode == "semantic":
                     keyword_query = {"bool": {"filter": filters}}
 
-        search_kwargs: dict[str, Any] = {
-            "index": self.index,
-            "size": limit,
-            "from_": params.offset,
-            "query": keyword_query,
-        }
-        if knn is not None:
-            search_kwargs["knn"] = knn
-        if params.explain:
-            search_kwargs["explain"] = True
-        try:
-            result = self.es.search(**search_kwargs)
-        except Exception as exc:  # noqa: BLE001
-            # Missing vector mapping on legacy indexes: retry as keyword.
-            if knn is not None and "embedding" in str(exc).lower():
-                semantic_warning = (
-                    "Vector mapping missing on this index; fell back to keyword. "
-                    "See README migration notes"
-                )
-                search_kwargs.pop("knn", None)
-                search_kwargs["query"] = {
-                    "bool": {
-                        "must": [{"match": {"content": query_text}}],
-                        "filter": filters,
-                    }
-                }
-                try:
-                    result = self.es.search(**search_kwargs)
-                except Exception as exc2:  # noqa: BLE001
-                    raise map_es_error(exc2, "memory search")
-            else:
-                raise map_es_error(exc, "memory search")
+        # Execute Search with native RRF when in hybrid mode
+        result: dict[str, Any]
+        used_rrf = False
 
-        total = result["hits"]["total"]["value"]
+        if params.mode == "hybrid" and knn is not None and settings.RRF_ENABLED:
+            # Modern Elasticsearch 9.2 Retriever API with Reciprocal Rank Fusion
+            retriever_body: dict[str, Any] = {
+                "index": self.index,
+                "size": candidate_limit,
+                "retriever": {
+                    "rrf": {
+                        "retrievers": [
+                            {"standard": {"query": keyword_query}},
+                            {"knn": knn},
+                        ],
+                        "rank_window_size": settings.RRF_WINDOW_SIZE,
+                        "rank_constant": settings.RRF_CONSTANT,
+                    }
+                },
+            }
+            if params.explain:
+                retriever_body["explain"] = True
+            try:
+                result = self.es.search(**retriever_body)
+                used_rrf = True
+            except Exception as exc:  # noqa: BLE001
+                log.info("Native RRF retriever returned (%s); falling back to hybrid query.", exc)
+                used_rrf = False
+
+        if not used_rrf:
+            search_kwargs: dict[str, Any] = {
+                "index": self.index,
+                "size": candidate_limit,
+                "from_": 0 if settings.RERANKER_ENABLED else params.offset,
+                "query": keyword_query,
+            }
+            if knn is not None:
+                search_kwargs["knn"] = knn
+            if params.explain:
+                search_kwargs["explain"] = True
+            try:
+                result = self.es.search(**search_kwargs)
+            except Exception as exc:  # noqa: BLE001
+                # Missing vector mapping on legacy indexes: retry as keyword.
+                if knn is not None and "embedding" in str(exc).lower():
+                    semantic_warning = (
+                        "Vector mapping missing on this index; fell back to keyword. "
+                        "See README migration notes"
+                    )
+                    search_kwargs.pop("knn", None)
+                    search_kwargs["query"] = {
+                        "bool": {
+                            "must": [{"match": {"content": cleaned_query}}],
+                            "filter": filters,
+                        }
+                    }
+                    try:
+                        result = self.es.search(**search_kwargs)
+                    except Exception as exc2:  # noqa: BLE001
+                        raise map_es_error(exc2, "memory search")
+                else:
+                    raise map_es_error(exc, "memory search")
+
+        hits = result["hits"]["hits"]
+        total = result["hits"]["total"]["value"] if isinstance(result["hits"].get("total"), dict) else len(hits)
+        records = [self._to_record(h, explain=params.explain) for h in hits]
+
+        # Stage 3: Cross-Encoder Reranking
+        if settings.RERANKER_ENABLED and records:
+            reranker = get_reranker()
+            if reranker.is_available:
+                records = reranker.rerank(query_text, records, top_k=limit)
+            else:
+                records = records[params.offset : params.offset + limit]
+        else:
+            records = records[params.offset : params.offset + limit]
+
         response: dict[str, Any] = {
-            "count": len(result["hits"]["hits"]),
+            "count": len(records),
             "total": total,
             "offset": params.offset,
             "mode": params.mode,
-            "memories": [
-                self._to_record(h, explain=params.explain)
-                for h in result["hits"]["hits"]
-            ],
+            "rrf": used_rrf,
+            "cleaned_query": cleaned_query if cleaned_query != query_text else None,
+            "memories": records,
         }
         if semantic_warning:
             response["warning"] = semantic_warning
         return response
+

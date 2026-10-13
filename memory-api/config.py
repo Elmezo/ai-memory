@@ -82,8 +82,18 @@ class Settings:
     EMBEDDING_MODEL: str = _getenv("EMBEDDING_MODEL", "bge-m3")
     EMBEDDING_DIMS: int = _getint("EMBEDDING_DIMS", 1024)
     OLLAMA_BASE_URL: str = _getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    HYBRID_KEYWORD_WEIGHT: float = _getfloat("HYBRID_KEYWORD_WEIGHT", 0.6)
-    HYBRID_VECTOR_WEIGHT: float = _getfloat("HYBRID_VECTOR_WEIGHT", 0.4)
+    # Hybrid Search Fusion: RRF (Reciprocal Rank Fusion)
+    RRF_ENABLED: bool = _getbool("RRF_ENABLED", True)
+    RRF_WINDOW_SIZE: int = _getint("RRF_WINDOW_SIZE", 50)
+    RRF_CONSTANT: int = _getint("RRF_CONSTANT", 60)
+
+    # Cross-Encoder Reranking
+    RERANKER_ENABLED: bool = _getbool("RERANKER_ENABLED", True)
+    RERANKER_MODEL: str = _getenv("RERANKER_MODEL", "BAAI/bge-reranker-base")
+    RERANK_TOP_K: int = _getint("RERANK_TOP_K", 20)
+
+    # Query Normalization & Conversational Cleanup
+    QUERY_EXPANSION_ENABLED: bool = _getbool("QUERY_EXPANSION_ENABLED", True)
 
     # MCP
     MCP_TRANSPORT: str = _getenv("MCP_TRANSPORT", "stdio").strip().lower()
