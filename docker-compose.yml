@@ -5,15 +5,24 @@ services:
     container_name: ai-memory-elasticsearch
 
     environment:
+      # Local development only: security is disabled for a frictionless
+      # single-node setup. Enable xpack.security and TLS for any shared or
+      # networked deployment (see SECURITY.md).
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
 
     ports:
-      - "9200:9200"
+      # Bind to loopback only so the (unauthenticated) dev index is not
+      # reachable from other hosts. Remove the 127.0.0.1 prefix only behind a
+      # firewall/authenticating proxy.
+      - "127.0.0.1:9200:9200"
 
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+
+    security_opt:
+      - no-new-privileges:true
 
     restart: unless-stopped
 

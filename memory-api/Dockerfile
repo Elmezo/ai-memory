@@ -18,6 +18,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source code
 COPY . .
 
+# Run as an unprivileged, non-root user (defense in depth).
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+ENV HOME=/home/appuser
+USER appuser
+
 # Expose REST API and MCP ports
 EXPOSE 8000 8001
 

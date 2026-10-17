@@ -82,12 +82,25 @@ def map_es_error(exc: Exception, action: str = "operation") -> StoreError:
 
 
 def create_client() -> Elasticsearch:
-    return Elasticsearch(
-        settings.ES_URL,
-        request_timeout=settings.ES_TIMEOUT,
-        max_retries=settings.ES_MAX_RETRIES,
-        retry_on_timeout=True,
-    )
+    """Build an Elasticsearch client, applying optional auth/TLS when configured.
+
+    Authentication is only attached when ``ES_USERNAME`` is set, and TLS options
+    when the URL is HTTPS or ``ES_CA_CERTS`` is provided, so the default local
+    (security-disabled) setup is unchanged.
+    """
+    kwargs: dict[str, Any] = {
+        "request_timeout": settings.ES_TIMEOUT,
+        "max_retries": settings.ES_MAX_RETRIES,
+        "retry_on_timeout": True,
+    }
+    if settings.ES_USERNAME:
+        kwargs["basic_auth"] = (settings.ES_USERNAME, settings.ES_PASSWORD)
+    if settings.ES_URL.lower().startswith("https") or settings.ES_CA_CERTS:
+        kwargs["verify_certs"] = settings.ES_VERIFY_CERTS
+        kwargs["ssl_show_warn"] = False
+        if settings.ES_CA_CERTS:
+            kwargs["ca_certs"] = settings.ES_CA_CERTS
+    return Elasticsearch(settings.ES_URL, **kwargs)
 
 
 def wait_for_es(es: Elasticsearch, timeout: float = 60.0) -> None:

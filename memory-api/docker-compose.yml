@@ -3,13 +3,19 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
     container_name: ai-memory-elasticsearch
     environment:
+      # Local development only: enable xpack.security and TLS for any shared or
+      # networked deployment (see SECURITY.md).
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     ports:
-      - "9200:9200"
+      # Loopback-only so the unauthenticated dev index is not exposed to the
+      # network. Remove the 127.0.0.1 prefix only behind an authenticating proxy.
+      - "127.0.0.1:9200:9200"
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
@@ -38,8 +44,12 @@ services:
       - EMBEDDING_PROVIDER=hash
       - EMBEDDING_DIMS=384
     ports:
-      - "8000:8000"
-      - "8001:8001"
+      # Loopback-only by default. Change to "8000:8000" only when the API is
+      # fronted by an authenticating reverse proxy and AUTH_MODE=token.
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8001:8001"
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]

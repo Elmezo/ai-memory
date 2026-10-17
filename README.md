@@ -164,17 +164,54 @@ Add the server to your OpenCode configuration (`~/.config/opencode/opencode.json
 
 ## 🛠️ MCP Tools
 
-| Tool | Description |
-|---|---|
-| `memory_health` | Checks status of Elasticsearch, Ollama, and index statistics |
-| `memory_save` | Saves or deduplicates memories with importance & confidence scores |
-| `memory_search` | Executes 3-stage RRF + Reranked hybrid search with recency boost |
-| `memory_get` | Retrieves a specific memory by ID with strict scope enforcement |
-| `memory_update` | Updates fields of an existing memory |
-| `memory_delete` | Permanently deletes a scoped memory |
-| `memory_list` | Lists memories with pagination, status filters, and sorting |
+Every tool advertises MCP `ToolAnnotations` (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`) that accurately describe its behavior, so MCP
+clients and LLMs can reason about safety before calling them.
+
+| Tool | Class | Description |
+|---|---|---|
+| `memory_health` | read-only | Checks status of Elasticsearch, the embedding provider, and index statistics |
+| `memory_save` | write (additive) | Saves or deduplicates memories with importance & confidence scores |
+| `memory_search` | read-only | Executes 3-stage RRF + Reranked hybrid search with recency boost |
+| `memory_get` | read-only | Retrieves a specific memory by ID with strict scope enforcement |
+| `memory_update` | write (idempotent) | Updates fields of an existing memory |
+| `memory_delete` | **destructive** | Permanently deletes a scoped memory |
+| `memory_list` | read-only | Lists memories with pagination, status filters, and sorting |
+
+`openWorldHint` is `false` for all tools: the server only ever touches its own
+Elasticsearch-backed memory store.
+
+---
+
+## 🔒 Security Model
+
+- **Multi-tenant isolation**: every query is filtered server-side by `tenant_id`
+  and `user_id`; a memory ID alone never grants access to another scope.
+- **MCP scope injection**: when `MEMORY_TENANT_ID` / `MEMORY_USER_ID` are set,
+  the server overrides agent-supplied identity so an agent cannot forge it.
+- **Authentication**: `AUTH_MODE=disabled` is for local use only;
+  `AUTH_MODE=token` enforces `Bearer` tokens mapped to a tenant/user scope.
+- **Elasticsearch**: the bundled dev stack disables ES security and binds port
+  `9200` to `127.0.0.1` only. Set `ES_USERNAME`, `ES_PASSWORD`, `ES_CA_CERTS`,
+  and `ES_VERIFY_CERTS` to connect to a secured/TLS cluster.
+- **Containers**: the image runs as a non-root user and Compose services use
+  `no-new-privileges` with loopback-only published ports.
+- See [SECURITY.md](SECURITY.md) for the full security policy and how to report
+  vulnerabilities.
+
+---
+
+## 🏅 Trust & M8ven
+
+This server is published for the M8ven MCP directory:
+<https://m8ven.ai/mcp/elmezo/ai-memory>. Tool metadata (descriptions and
+annotations) is kept accurate and in line with the MCP specification. Listing
+ownership/publisher verification on M8ven is a manual step performed by the
+maintainer; this README does not assert a verification status that has not been
+granted.
 
 ---
 
 ## 📄 License
-MIT License
+
+MIT — see [LICENSE](LICENSE).

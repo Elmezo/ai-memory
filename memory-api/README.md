@@ -282,6 +282,19 @@ Add to `claude_desktop_config.json`:
     `API_TOKENS=tok1:tenantA/user1,tok2:tenantB/*`
   - Rejects cross-tenant requests with `403 Cross-tenant access denied`.
   - Rejects cross-user requests with `403 Cross-user access denied`.
+- **MCP scope injection**: set `MEMORY_TENANT_ID` / `MEMORY_USER_ID` to lock the
+  MCP server to a fixed identity so agents cannot forge their scope.
+- **Elasticsearch auth/TLS**: the local stack disables ES security and binds
+  `9200` to `127.0.0.1`. For a secured cluster set `ES_USERNAME`,
+  `ES_PASSWORD`, `ES_CA_CERTS`, and `ES_VERIFY_CERTS`.
+- **Containers**: the image runs as a non-root user (`appuser`); Compose
+  services use `no-new-privileges` and publish ports on loopback only.
+- See [../SECURITY.md](../SECURITY.md) for the full policy and reporting process.
+
+> MCP tools advertise `ToolAnnotations` (`readOnlyHint`, `destructiveHint`,
+> `idempotentHint`, `openWorldHint`) describing their real behavior —
+> `memory_delete` is destructive, `memory_save`/`memory_update` are writes, and
+> the rest are read-only.
 
 ---
 
@@ -306,3 +319,10 @@ Run the full automated test suite:
 - Tenant isolation and cross-tenant rejection
 - Direct token scope authorization checks
 - MCP tool execution suite
+- MCP tool annotations (read-only / destructive / idempotent hints) — `test_mcp_annotations.py`
+
+---
+
+## 10. License
+
+MIT — see [../LICENSE](../LICENSE).

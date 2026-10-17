@@ -20,6 +20,7 @@ import logging
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 
 from config import settings
 from embeddings import get_provider
@@ -38,6 +39,28 @@ mcp = MCPServer(
 )
 
 _service: MemoryService | None = None
+
+
+def _annotations(
+    title: str,
+    *,
+    read_only: bool,
+    destructive: bool,
+    idempotent: bool,
+) -> ToolAnnotations:
+    """Build MCP tool annotations that accurately describe a tool's behavior.
+
+    ``open_world_hint`` is always ``False``: every tool operates on this
+    server's own Elasticsearch-backed memory store (a closed domain), never on
+    arbitrary external entities.
+    """
+    return ToolAnnotations(
+        title=title,
+        read_only_hint=read_only,
+        destructive_hint=destructive,
+        idempotent_hint=idempotent,
+        open_world_hint=False,
+    )
 
 
 def get_service() -> MemoryService:
@@ -62,7 +85,17 @@ def get_service() -> MemoryService:
 
 @mcp.tool(
     name="memory_health",
-    description="Check health of the AI Memory Server and Elasticsearch backend.",
+    title="Memory Server Health",
+    description=(
+        "Check the health and connectivity of the AI Memory Server and its "
+        "Elasticsearch backend. Returns the server status, Elasticsearch version "
+        "and cluster name, index document count, embedding provider/model, and the "
+        "active memory scope. Use this to verify the service is reachable before "
+        "other operations. Read-only: it never modifies stored data."
+    ),
+    annotations=_annotations(
+        "Memory Server Health", read_only=True, destructive=False, idempotent=True
+    ),
 )
 def memory_health() -> dict[str, Any]:
     svc = get_service()
@@ -111,10 +144,18 @@ def _scope_project(agent_value: str) -> str:
 
 @mcp.tool(
     name="memory_save",
+    title="Save Memory",
     description=(
-        "Save a new memory or deduplicate against existing memories. "
-        "tenant_id and user_id are injected from the server environment when configured; "
-        "values supplied by the agent are used only as fallback."
+        "Save a new long-term memory for the current agent/user, or return an "
+        "existing equivalent memory instead of duplicating it (exact and fuzzy "
+        "deduplication). Returns the saved or deduplicated memory plus any "
+        "possible conflicts. This is an additive write: it never overwrites or "
+        "deletes unrelated memories. tenant_id and user_id are injected from the "
+        "server environment when configured; agent-supplied values are used only "
+        "as a fallback."
+    ),
+    annotations=_annotations(
+        "Save Memory", read_only=False, destructive=False, idempotent=False
     ),
 )
 def memory_save(
@@ -166,7 +207,17 @@ def memory_save(
 
 @mcp.tool(
     name="memory_search",
-    description="Search memories using keyword, semantic, or hybrid search with filters and ranking.",
+    title="Search Memories",
+    description=(
+        "Search stored memories within the caller's tenant/user scope using "
+        "keyword (BM25), semantic (vector), or hybrid (RRF + cross-encoder "
+        "rerank) retrieval, with optional filters and ranking. Returns a ranked "
+        "list of matching memories and a total count. Read-only: it does not "
+        "create, update, or delete memories."
+    ),
+    annotations=_annotations(
+        "Search Memories", read_only=True, destructive=False, idempotent=True
+    ),
 )
 def memory_search(
     query: str,
@@ -226,7 +277,16 @@ def memory_search(
 
 @mcp.tool(
     name="memory_get",
-    description="Retrieve a specific memory by its ID, enforcing tenant and user isolation.",
+    title="Get Memory",
+    description=(
+        "Retrieve a single stored memory by its memory_id, enforcing tenant and "
+        "user isolation (a memory outside the caller's scope is reported as not "
+        "found). Returns the full memory record. Read-only; the only side effect "
+        "is updating the memory's last-accessed timestamp."
+    ),
+    annotations=_annotations(
+        "Get Memory", read_only=True, destructive=False, idempotent=True
+    ),
 )
 def memory_get(memory_id: str, user_id: str = "", tenant_id: str = "") -> dict[str, Any]:
     svc = get_service()
@@ -242,7 +302,18 @@ def memory_get(memory_id: str, user_id: str = "", tenant_id: str = "") -> dict[s
 
 @mcp.tool(
     name="memory_update",
-    description="Update fields of an existing memory safely within tenant and user scope.",
+    title="Update Memory",
+    description=(
+        "Update selected fields (content, importance, confidence, type, tags, "
+        "metadata, status, expiry, source) of an existing memory, scoped to the "
+        "caller's tenant and user. Only the fields you provide are changed; "
+        "omitted fields are left untouched. Returns the update status and the "
+        "list of changed fields. This modifies stored data but is not "
+        "destructive: it never deletes the memory."
+    ),
+    annotations=_annotations(
+        "Update Memory", read_only=False, destructive=False, idempotent=True
+    ),
 )
 def memory_update(
     memory_id: str,
@@ -297,7 +368,16 @@ def memory_update(
 
 @mcp.tool(
     name="memory_delete",
-    description="Permanently delete a memory within tenant and user scope.",
+    title="Delete Memory",
+    description=(
+        "Permanently delete a single memory by its memory_id, scoped to the "
+        "caller's tenant and user. DESTRUCTIVE and irreversible: the memory "
+        "cannot be recovered after deletion. Only the matching in-scope memory "
+        "is removed; deleting an already-deleted memory has no additional effect."
+    ),
+    annotations=_annotations(
+        "Delete Memory", read_only=False, destructive=True, idempotent=True
+    ),
 )
 def memory_delete(memory_id: str, user_id: str = "", tenant_id: str = "") -> dict[str, Any]:
     svc = get_service()
@@ -313,7 +393,17 @@ def memory_delete(memory_id: str, user_id: str = "", tenant_id: str = "") -> dic
 
 @mcp.tool(
     name="memory_list",
-    description="List memories with pagination and filters by tenant, user, agent, status, etc.",
+    title="List Memories",
+    description=(
+        "List memories for the caller's tenant/user scope with pagination and "
+        "optional filters (agent, project, type, status, tags), sorted by "
+        "updated_at, created_at, or importance. Returns the page of memories, "
+        "the total match count, and the offset. Read-only: it does not modify "
+        "stored data."
+    ),
+    annotations=_annotations(
+        "List Memories", read_only=True, destructive=False, idempotent=True
+    ),
 )
 def memory_list(
     tenant_id: str = "",

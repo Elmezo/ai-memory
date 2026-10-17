@@ -54,6 +54,14 @@ class Settings:
     ES_MAX_RETRIES: int = _getint("ES_MAX_RETRIES", 5)
     ES_RETRY_BACKOFF: float = _getfloat("ES_RETRY_BACKOFF", 1.0)
 
+    # Optional Elasticsearch authentication / TLS. Leave empty for the default
+    # local, security-disabled development stack; set these for any deployment
+    # where Elasticsearch requires credentials and/or HTTPS.
+    ES_USERNAME: str = _getenv("ES_USERNAME", "")
+    ES_PASSWORD: str = _getenv("ES_PASSWORD", "")
+    ES_CA_CERTS: str = _getenv("ES_CA_CERTS", "")
+    ES_VERIFY_CERTS: bool = _getbool("ES_VERIFY_CERTS", True)
+
     # API
     API_HOST: str = _getenv("API_HOST", "0.0.0.0")
     API_PORT: int = _getint("API_PORT", 8000)
