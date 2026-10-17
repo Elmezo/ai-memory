@@ -24,11 +24,22 @@ from mcp.types import ToolAnnotations
 
 from config import settings
 from embeddings import get_provider
+from mcp_auth import (
+    build_auth_settings,
+    build_token_verifier,
+    http_transport_enabled,
+    require_http_auth_config,
+)
 from models import MemoryInput, MemorySearch, MemoryStatus, MemoryType, MemoryUpdate
 from service import MemoryService
 from store import StoreError, create_client, ensure_index, wait_for_es
 
 log = logging.getLogger("memory.mcp")
+
+# The stdio transport is a local, process-bound pipe: no network auth needed.
+# The streamable-http transport listens on TCP, so it is wired with the SDK's
+# bearer-token authentication from the start and refuses to start misconfigured.
+_HTTP_AUTH = http_transport_enabled()
 
 # Initialize MCP server
 mcp = MCPServer(
@@ -36,6 +47,8 @@ mcp = MCPServer(
     title="AI Memory Server",
     description="Model-agnostic memory service for AI agents and multi-tenant applications.",
     version="1.0.0",
+    auth=build_auth_settings() if _HTTP_AUTH else None,
+    token_verifier=build_token_verifier() if _HTTP_AUTH else None,
 )
 
 _service: MemoryService | None = None
@@ -446,9 +459,17 @@ def main():
     if transport == "stdio":
         asyncio.run(mcp.run_stdio_async())
     elif transport in {"streamable-http", "http"}:
+        # Fail fast if the network transport would be exposed without a valid
+        # bearer-token configuration and an explicit tenant/user scope.
+        require_http_auth_config()
+        log.info(
+            "MCP streamable-http listening on %s:%s (bearer auth required)",
+            settings.MCP_HOST,
+            settings.MCP_PORT,
+        )
         asyncio.run(
             mcp.run_streamable_http_async(
-                host=settings.API_HOST,
+                host=settings.MCP_HOST,
                 port=settings.MCP_PORT,
             )
         )

@@ -103,7 +103,13 @@ Swagger UI will be accessible at: `http://localhost:8000/docs`
   .\.venv\Scripts\python mcp_server.py
   ```
 - **Streamable HTTP mode** (remote agent access):
-  Set `MCP_TRANSPORT=streamable-http` and `MCP_PORT=8001`, then run `python mcp_server.py`.
+  Set `MCP_TRANSPORT=streamable-http`, `MCP_HOST=127.0.0.1`, `MCP_PORT=8001`, and
+  a valid `API_TOKENS` entry, then run `python mcp_server.py`. The HTTP transport
+  **requires bearer authentication**: clients must send
+  `Authorization: Bearer <token>` (the same static tokens as the REST API) or
+  receive `401`. The server refuses to start if `API_TOKENS` is empty or
+  `MEMORY_TENANT_ID` / `MEMORY_USER_ID` are unset. Keep it on loopback behind a
+  TLS reverse proxy for remote use.
 
 ---
 
@@ -282,8 +288,16 @@ Add to `claude_desktop_config.json`:
     `API_TOKENS=tok1:tenantA/user1,tok2:tenantB/*`
   - Rejects cross-tenant requests with `403 Cross-tenant access denied`.
   - Rejects cross-user requests with `403 Cross-user access denied`.
+  - Fails closed: a token without a tenant is rejected, and the server validates
+    `API_TOKENS` at startup (empty tenant/user or malformed scope aborts startup).
+- **MCP transports**:
+  - `stdio` is a local, unauthenticated pipe.
+  - `streamable-http` requires bearer auth (same `API_TOKENS` as the REST API)
+    and binds to `MCP_HOST` (`127.0.0.1` by default); it refuses to start without
+    a valid token config and an explicit `MEMORY_TENANT_ID` / `MEMORY_USER_ID`.
 - **MCP scope injection**: set `MEMORY_TENANT_ID` / `MEMORY_USER_ID` to lock the
-  MCP server to a fixed identity so agents cannot forge their scope.
+  MCP server to a fixed identity so agents cannot forge their scope — for both
+  transports and regardless of tool arguments.
 - **Elasticsearch auth/TLS**: the local stack disables ES security and binds
   `9200` to `127.0.0.1`. For a secured cluster set `ES_USERNAME`,
   `ES_PASSWORD`, `ES_CA_CERTS`, and `ES_VERIFY_CERTS`.

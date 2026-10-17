@@ -32,6 +32,11 @@ following assumptions explicit.
 - `AUTH_MODE=token` requires `Authorization: Bearer <token>`. Tokens are static
   and mapped to a `tenant/user` scope via `API_TOKENS`. Requests outside the
   token's scope are rejected with `403`.
+- Scope enforcement **fails closed**: a token that resolves to no tenant is
+  rejected. The server also validates `API_TOKENS` at startup and refuses to
+  start if any entry has an empty tenant, an empty user, or a malformed scope
+  (previously, malformed entries such as `tok:/*` were silently dropped and the
+  scope check was bypassed).
 - Limitations: static bearer tokens, no expiry/rotation, no external identity
   provider. Put an authenticating reverse proxy (or OAuth2/OIDC) in front of the
   service for real multi-user production use.
@@ -41,12 +46,27 @@ following assumptions explicit.
 Every read and write is filtered server-side by `tenant_id` and `user_id`. Memory
 IDs alone are never sufficient to access a document outside the caller's scope.
 
+### MCP transports
+
+- `MCP_TRANSPORT=stdio` (the default) is a local, process-bound pipe and runs
+  without network authentication, as before.
+- `MCP_TRANSPORT=streamable-http` exposes the tools over TCP, so it now
+  **requires bearer authentication** using the SDK's supported mechanism and the
+  same static `API_TOKENS` table as the REST API. Requests without a valid token
+  receive `401`. The server refuses to start if `API_TOKENS` is empty or if
+  `MEMORY_TENANT_ID` / `MEMORY_USER_ID` are unset.
+- The HTTP transport binds to `MCP_HOST` (loopback, `127.0.0.1`, by default).
+  Keep it on loopback and terminate TLS in a reverse proxy for remote use; set
+  `MCP_PUBLIC_URL` when it is behind a proxy. Each HTTP MCP deployment serves a
+  single authorized scope.
+
 ### MCP scope injection
 
 When the MCP server runs with `MEMORY_TENANT_ID` / `MEMORY_USER_ID` set (the
 default in `.env.example`), the server **overrides** any tenant/user supplied by
 the agent and acts only within that fixed scope, preventing an agent from
-forging identity to reach other scopes.
+forging identity to reach other scopes. This holds for both transports and all
+tool arguments.
 
 ### Elasticsearch
 

@@ -183,6 +183,154 @@ Elasticsearch-backed memory store.
 
 ---
 
+## 🧩 Embed in Your Chatbot (Python)
+
+You can give any chatbot long-term memory in two ways:
+
+- **REST API** — call the HTTP endpoints below from any language/framework.
+- **MCP** — if your chatbot already speaks MCP (OpenCode, Claude Desktop,
+  Cursor), just register the server (see *OpenCode Configuration*) and the model
+  calls the tools for you.
+
+### 1. A minimal REST client
+
+```python
+# pip install requests
+import requests
+
+
+class MemoryClient:
+    """Tiny client for the AI Memory Server REST API."""
+
+    def __init__(self, base_url="http://localhost:8000", token=None,
+                 tenant_id="my_tenant", user_id="my_user"):
+        self.base_url = base_url.rstrip("/")
+        self.tenant_id = tenant_id
+        self.user_id = user_id
+        self.session = requests.Session()
+        if token:  # required when AUTH_MODE=token; omit for local dev
+            self.session.headers["Authorization"] = f"Bearer {token}"
+
+    def remember(self, content, **extra):
+        """Save a memory (additive; near-duplicates are returned, not duplicated)."""
+        payload = {
+            "tenant_id": self.tenant_id,
+            "user_id": self.user_id,
+            "content": content,
+            **extra,  # e.g. type="preference", importance=0.8, tags=["billing"]
+        }
+        r = self.session.post(f"{self.base_url}/memories", json=payload, timeout=30)
+        r.raise_for_status()
+        return r.json()  # {"status": "saved"|"deduplicated", "memory": {...}}
+
+    def recall(self, query, limit=5, mode="hybrid"):
+        """Return the most relevant memories for a query."""
+        payload = {
+            "tenant_id": self.tenant_id,
+            "user_id": self.user_id,
+            "query": query,
+            "limit": limit,
+            "mode": mode,  # "keyword" | "semantic" | "hybrid"
+        }
+        r = self.session.post(f"{self.base_url}/memories/search", json=payload, timeout=30)
+        r.raise_for_status()
+        return r.json()["memories"]  # list of memory records
+```
+
+> `tenant_id` / `user_id` must match the bearer token's scope, otherwise the
+> server answers `403`. In local dev (`AUTH_MODE=disabled`) you can pass any
+> scope and omit `token`.
+
+### 2. Wire memory into a chatbot (retrieve → answer → store)
+
+```python
+memory = MemoryClient(token="my-secret-token", tenant_id="acme", user_id="alice")
+
+
+def chat(user_message, llm):
+    # 1) Recall relevant memories and inject them into the system prompt
+    recalled = memory.recall(user_message)
+    context = "\n".join(f"- {m['content']}" for m in recalled) or "(nothing yet)"
+    system = f"You are a helpful assistant.\nKnown facts about the user:\n{context}"
+
+    # 2) Ask your model (OpenAI, Anthropic, a local model, your own function, ...)
+    answer = llm(system, user_message)
+
+    # 3) Persist something worth remembering for next time
+    memory.remember(user_message, type="conversation_summary")
+
+    return answer
+```
+
+### 3. Optional — expose memory as tools (function calling)
+
+Instead of injecting memories yourself, let the model decide when to search or
+save by exposing two tools. Only non-identity fields are exposed (`tenant_id` /
+`user_id` stay server-side, so the model can never change scope):
+
+```python
+MEMORY_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_search",
+            "description": "Search the user's long-term memory before answering.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer", "default": 5},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "memory_save",
+            "description": "Store a durable fact, preference, decision or task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string"},
+                    "type": {
+                        "type": "string",
+                        "enum": ["preference", "fact", "decision", "task",
+                                 "entity", "conversation_summary",
+                                 "procedure", "constraint"],
+                    },
+                },
+                "required": ["content"],
+            },
+        },
+    },
+]
+
+
+def run_memory_tool(name, args):
+    """Dispatch a tool call coming from the model."""
+    if name == "memory_search":
+        return memory.recall(args["query"], limit=args.get("limit", 5))
+    if name == "memory_save":
+        return memory.remember(args["content"], type=args.get("type", "fact"))
+    raise ValueError(f"Unknown tool: {name}")
+```
+
+Then, in your tool-calling loop, pass `MEMORY_TOOLS` to the model and feed the
+result of `run_memory_tool(tool_name, json.loads(tool_call.arguments))` back as
+the tool response. Scope is always taken from the `MemoryClient`, never from the
+model.
+
+### Notes for production
+
+- Send the bearer token only from your server, never from a browser or the model.
+- Keep the API on `127.0.0.1` behind a TLS-terminating reverse proxy; for remote
+  MCP use `MCP_TRANSPORT=streamable-http` with `MCP_HOST=127.0.0.1`.
+- Give each tenant/user their own token in `API_TOKENS` (see *Security Model*).
+
+---
+
 ## 🔒 Security Model
 
 - **Multi-tenant isolation**: every query is filtered server-side by `tenant_id`
@@ -190,7 +338,12 @@ Elasticsearch-backed memory store.
 - **MCP scope injection**: when `MEMORY_TENANT_ID` / `MEMORY_USER_ID` are set,
   the server overrides agent-supplied identity so an agent cannot forge it.
 - **Authentication**: `AUTH_MODE=disabled` is for local use only;
-  `AUTH_MODE=token` enforces `Bearer` tokens mapped to a tenant/user scope.
+  `AUTH_MODE=token` enforces `Bearer` tokens mapped to a tenant/user scope, fails
+  closed on tokens without a tenant, and validates `API_TOKENS` at startup.
+- **MCP transports**: `stdio` stays a local, unauthenticated pipe;
+  `streamable-http` requires bearer authentication (reusing `API_TOKENS`) and
+  binds to `MCP_HOST` (`127.0.0.1` by default). It refuses to start without a
+  valid token configuration and an explicit tenant/user scope.
 - **Elasticsearch**: the bundled dev stack disables ES security and binds port
   `9200` to `127.0.0.1` only. Set `ES_USERNAME`, `ES_PASSWORD`, `ES_CA_CERTS`,
   and `ES_VERIFY_CERTS` to connect to a secured/TLS cluster.

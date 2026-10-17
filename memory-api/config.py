@@ -105,7 +105,13 @@ class Settings:
 
     # MCP
     MCP_TRANSPORT: str = _getenv("MCP_TRANSPORT", "stdio").strip().lower()
+    # Loopback by default: the HTTP transport must be explicitly exposed behind
+    # authentication and (preferably) a TLS-terminating reverse proxy.
+    MCP_HOST: str = _getenv("MCP_HOST", "127.0.0.1")
     MCP_PORT: int = _getint("MCP_PORT", 8001)
+    # Public base URL used for OAuth protected-resource metadata when the HTTP
+    # transport is enabled. Defaults to the bound host/port.
+    MCP_PUBLIC_URL: str = _getenv("MCP_PUBLIC_URL", "")
 
     # MCP scope injection — set these in the MCP server's environment so the
     # agent cannot forge its own tenant/user identity.

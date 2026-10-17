@@ -1,5 +1,9 @@
 services:
 
+  # Elasticsearch only. This is the LOCAL DEVELOPMENT stack: security is off and
+  # the port is loopback-bound. For production, enable xpack.security with real
+  # credentials and TLS, and set the matching ES_USERNAME / ES_PASSWORD /
+  # ES_CA_CERTS / ES_VERIFY_CERTS on the memory-api service (see SECURITY.md).
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
     container_name: ai-memory-elasticsearch

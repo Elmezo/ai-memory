@@ -1,4 +1,19 @@
 services:
+  # ---------------------------------------------------------------------------
+  # LOCAL DEVELOPMENT PROFILE (default).
+  #
+  # This stack is intentionally insecure for local dev:
+  #   * Elasticsearch has xpack.security disabled and is loopback-bound.
+  #   * memory-api runs with AUTH_MODE=disabled and is loopback-bound.
+  #
+  # PRODUCTION checklist (do NOT ship the defaults above):
+  #   * Set xpack.security.enabled=true and configure ES_USERNAME/ES_PASSWORD;
+  #     mount a CA bundle and set ES_CA_CERTS + ES_VERIFY_CERTS=true (see SECURITY.md).
+  #   * Set AUTH_MODE=token and provide real API_TOKENS via an .env file or secret
+  #     manager (never hardcode them in this file). Each token needs a tenant.
+  #   * Keep the published ports on loopback and terminate TLS in a reverse proxy;
+  #     only publish 0.0.0.0:… behind that proxy with AUTH_MODE=token.
+  # ---------------------------------------------------------------------------
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
     container_name: ai-memory-elasticsearch

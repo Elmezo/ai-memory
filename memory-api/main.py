@@ -11,7 +11,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from auth import Identity, enforce_scope, get_identity
+from auth import Identity, enforce_scope, get_identity, validate_token_config
 from config import settings
 from embeddings import get_provider
 from models import MemoryInput, MemoryRecord, MemorySearch, MemoryUpdate
@@ -34,6 +34,12 @@ def _service() -> MemoryService:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global service, es_client
+    if settings.AUTH_MODE != "disabled":
+        # Fail fast on a bad token configuration instead of silently dropping
+        # malformed entries (which could otherwise weaken tenant isolation).
+        validate_token_config(
+            settings.API_TOKENS, require_non_empty=True, source="API_TOKENS"
+        )
     es_client = create_client()
     wait_for_es(es_client)
     report = ensure_index(es_client)
