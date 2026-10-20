@@ -258,6 +258,8 @@ arXiv: 2610.21147
 
 https://arxiv.org/abs/2610.21147
 
+PDF: https://arxiv.org/pdf/2610.21147
+
 This project does not reproduce the full AiO-Mem training pipeline. It adopts
 selected architectural ideas—explicit evidence state, search/add/skip/stop
 actions, source traceability, process-level observability, and a reward
@@ -339,6 +341,8 @@ All-in-One Memory: Process-Rewarded Reinforcement Learning for Memory Agents
 arXiv: 2610.21147
 
 https://arxiv.org/abs/2610.21147
+
+PDF: https://arxiv.org/pdf/2610.21147
 
 This project does not reproduce the full AiO-Mem training pipeline. It adopts
 selected architectural ideas—explicit evidence state, search/add/skip/stop
