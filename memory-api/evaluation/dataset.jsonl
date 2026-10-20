@@ -1,0 +1,10 @@
+{"id":"q001","query":"database port","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_001"],"equivalent_memory_ids":{"mem_006":"mem_001"},"metadata":{"case":"duplicate relevant"}}
+{"id":"q002","query":"dark theme preference","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_003"],"metadata":{"case":"exact preference"}}
+{"id":"q003","query":"PostgreSQL production decision","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_004"],"metadata":{"case":"decision"}}
+{"id":"q004","query":"API rate limit","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_005"],"metadata":{"case":"fact"}}
+{"id":"q005","query":"Redis cache TTL","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_007"],"metadata":{"case":"cache"}}
+{"id":"q006","query":"deployment approval","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_008"],"metadata":{"case":"procedure"}}
+{"id":"q007","query":"backup schedule","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_010"],"metadata":{"case":"backup"}}
+{"id":"q008","query":"quantum computing","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":[],"metadata":{"case":"no relevant"}}
+{"id":"q009","query":"database password","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":[],"metadata":{"case":"isolation: other tenant secret"}}
+{"id":"q010","query":"staging database port","tenant_id":"eval_tenant","user_id":"eval_user","agent_id":"eval_agent","project_id":"eval_project","relevant_memory_ids":["mem_002"],"metadata":{"case":"staging"}}

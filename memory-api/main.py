@@ -14,7 +14,13 @@ from fastapi.responses import JSONResponse
 from auth import Identity, enforce_scope, get_identity, validate_token_config
 from config import settings
 from embeddings import get_provider
-from models import MemoryInput, MemoryRecord, MemorySearch, MemoryUpdate
+from models import (
+    MemoryInput,
+    MemoryInteractionRequest,
+    MemoryRecord,
+    MemorySearch,
+    MemoryUpdate,
+)
 from service import MemoryService
 from store import StoreError, create_client, ensure_index, wait_for_es
 
@@ -155,6 +161,38 @@ def search_memories(data: MemorySearch, identity: Identity = Depends(get_identit
         )
     enforce_scope(identity, data.tenant_id, data.user_id)
     return _handle_store(_service().search, data)
+
+
+@app.post("/memories/interact")
+def interact_memories(data: MemoryInteractionRequest, identity: Identity = Depends(get_identity)):
+    if not data.user_id or not data.tenant_id:
+        raise HTTPException(
+            status_code=422,
+            detail="user_id and tenant_id are required fields for POST /memories/interact",
+        )
+    enforce_scope(identity, data.tenant_id, data.user_id)
+    try:
+        return _service().interact(
+            query=data.query,
+            tenant_id=data.tenant_id,
+            user_id=data.user_id,
+            agent_id=data.agent_id or "default",
+            project_id=data.project_id or "default",
+            mem_type=data.type,
+            status=data.status,
+            tags=data.tags,
+            limit=data.limit,
+            mode=data.mode,
+            include_expired=data.include_expired,
+            include_inactive=data.include_inactive,
+            max_steps=data.max_steps,
+            max_searches=data.max_searches,
+            max_candidates=data.max_candidates,
+            timeout=data.timeout,
+            add_relevance_threshold=data.add_relevance_threshold,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/memories")

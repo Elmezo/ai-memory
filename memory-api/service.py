@@ -417,6 +417,15 @@ class MemoryService:
         if cleaned_query != query_text:
             match_clauses.append({"match": {"content": {"query": query_text, "boost": 1.0}}})
 
+        # Optional multi-view retrieval (additive, safe when fields are absent).
+        if settings.MEMORY_ENABLE_MULTI_VIEW:
+            match_clauses.append(
+                {"match": {"event_phrase": {"query": cleaned_query, "boost": 1.2}}}
+            )
+            match_clauses.append(
+                {"match": {"summary": {"query": cleaned_query, "boost": 1.0}}}
+            )
+
         keyword_query: dict[str, Any] = {
             "bool": {
                 "should": match_clauses,
@@ -584,4 +593,18 @@ class MemoryService:
         if semantic_warning:
             response["warning"] = semantic_warning
         return response
+
+    def interact(self, **kwargs: Any) -> dict[str, Any]:
+        """Run an explicit evidence-state memory interaction.
+
+        Preserves tenant/user/agent/project scoping: all retrieval goes through
+        :meth:`search`, which applies the same authorization filters.
+        """
+        from controller import MemoryInteractionController
+
+        threshold = kwargs.pop("add_relevance_threshold", None)
+        controller = MemoryInteractionController(
+            self, add_relevance_threshold=threshold
+        )
+        return controller.run(**kwargs)
 

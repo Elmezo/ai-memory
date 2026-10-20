@@ -120,5 +120,23 @@ class Settings:
     MEMORY_AGENT_ID: str = _getenv("MEMORY_AGENT_ID", "opencode")
     MEMORY_PROJECT_ID: str = _getenv("MEMORY_PROJECT_ID", "default")
 
+    # Intelligent memory interaction (AiO-Mem-inspired, rule-based by default)
+    MEMORY_POLICY_MODE: str = _getenv("MEMORY_POLICY_MODE", "rule_based").strip().lower()
+    MEMORY_POLICY_VERSION: str = _getenv("MEMORY_POLICY_VERSION", "rule_based_v1")
+    MEMORY_MAX_STEPS: int = _getint("MEMORY_MAX_STEPS", 3)
+    MEMORY_MAX_SEARCHES: int = _getint("MEMORY_MAX_SEARCHES", 2)
+    MEMORY_MAX_CANDIDATES: int = _getint("MEMORY_MAX_CANDIDATES", 10)
+    MEMORY_INTERACTION_TIMEOUT_SECONDS: float = _getfloat(
+        "MEMORY_INTERACTION_TIMEOUT_SECONDS", 30.0
+    )
+    MEMORY_ENABLE_MULTI_VIEW: bool = _getbool("MEMORY_ENABLE_MULTI_VIEW", True)
+    MEMORY_ENABLE_PROCESS_REWARD: bool = _getbool("MEMORY_ENABLE_PROCESS_REWARD", False)
+    MEMORY_ENABLE_TRAJECTORY_LOGGING: bool = _getbool(
+        "MEMORY_ENABLE_TRAJECTORY_LOGGING", True
+    )
+    MEMORY_ADD_RELEVANCE_THRESHOLD: float = _getfloat(
+        "MEMORY_ADD_RELEVANCE_THRESHOLD", 0.0
+    )
+
 
 settings = Settings()

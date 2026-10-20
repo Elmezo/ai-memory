@@ -183,6 +183,393 @@ Elasticsearch-backed memory store.
 
 ---
 
+## Intelligent Memory Interaction
+
+The server now supports an evidence-state-based memory interaction architecture
+inspired by *All-in-One Memory: Process-Rewarded Reinforcement Learning for
+Memory Agents* (AiO-Mem, arXiv:2610.21147). This project does not reproduce
+the full AiO-Mem training pipeline; it adopts selected architectural ideas.
+
+Flow:
+
+    Query
+      ↓
+    Evidence State
+      ↓
+    SEARCH / STOP
+      ↓
+    ADD / SKIP
+      ↓
+    Working Memory
+      ↓
+    STOP
+
+### Implemented now
+
+1. Evidence State (`EvidenceState`)
+2. Explicit memory actions (`SEARCH`, `ADD`, `SKIP`, `STOP`)
+3. Memory policy interface (`MemoryPolicy`) with a deterministic
+   `RuleBasedMemoryPolicy`
+4. Multi-view memory fields (summary, event_phrase; query_anchors stored) - optional
+5. Source traceability / provenance fields - optional
+6. Search history and redundancy control
+7. Process trajectory and observability
+8. Process reward interface (`RewardEvaluator`, advisory only)
+
+### Future research / planned
+
+- Learned memory policy (LLM or RL)
+- Reward model training
+- DPO / RL / PA-DAPO
+- Benchmark reproduction
+
+```mermaid
+flowchart TD
+    Q[User Query] --> ES[Evidence State]
+
+    ES --> P[Memory Policy]
+
+    P -->|SEARCH| R[Multi-View Retrieval]
+    P -->|STOP| W[Working Memory]
+
+    R --> RR[Reranker]
+    RR --> C[Candidates]
+
+    C --> E[Candidate Evaluation]
+
+    E -->|ADD| W
+    E -->|SKIP| ES
+
+    W --> ES
+
+    ES --> T[Trajectory / Observability]
+    T --> RE[Process Reward Evaluator]
+
+    R --> ES
+```
+
+### Research Inspiration
+
+Inspired by:
+
+All-in-One Memory: Process-Rewarded Reinforcement Learning for Memory Agents
+
+arXiv: 2610.21147
+
+https://arxiv.org/abs/2610.21147
+
+This project does not reproduce the full AiO-Mem training pipeline. It adopts
+selected architectural ideas—explicit evidence state, search/add/skip/stop
+actions, source traceability, process-level observability, and a reward
+interface—to evolve the memory server toward a learnable memory-policy
+architecture. No benchmark results from the paper are claimed as results of
+this project.
+
+## Intelligent Memory Interaction
+
+The server now supports an evidence-state-based memory interaction architecture
+inspired by *All-in-One Memory: Process-Rewarded Reinforcement Learning for
+Memory Agents* (AiO-Mem, arXiv:2610.21147). This project does not reproduce
+the full AiO-Mem training pipeline; it adopts selected architectural ideas.
+
+Flow:
+
+    Query
+      ↓
+    Evidence State
+      ↓
+    SEARCH / STOP
+      ↓
+    ADD / SKIP
+      ↓
+    Working Memory
+      ↓
+    STOP
+
+### Implemented now
+
+1. Evidence State (`EvidenceState`)
+2. Explicit memory actions (`SEARCH`, `ADD`, `SKIP`, `STOP`)
+3. Memory policy interface (`MemoryPolicy`) with a deterministic
+   `RuleBasedMemoryPolicy`
+4. Multi-view memory fields (summary, event_phrase; query_anchors stored) - optional
+5. Source traceability / provenance fields - optional
+6. Search history and redundancy control
+7. Process trajectory and observability
+8. Process reward interface (`RewardEvaluator`, advisory only)
+
+### Future research / planned
+
+- Learned memory policy (LLM or RL)
+- Reward model training
+- DPO / RL / PA-DAPO
+- Benchmark reproduction
+
+```mermaid
+flowchart TD
+    Q[User Query] --> ES[Evidence State]
+
+    ES --> P[Memory Policy]
+
+    P -->|SEARCH| R[Multi-View Retrieval]
+    P -->|STOP| W[Working Memory]
+
+    R --> RR[Reranker]
+    RR --> C[Candidates]
+
+    C --> E[Candidate Evaluation]
+
+    E -->|ADD| W
+    E -->|SKIP| ES
+
+    W --> ES
+
+    ES --> T[Trajectory / Observability]
+    T --> RE[Process Reward Evaluator]
+
+    R --> ES
+```
+
+### Research Inspiration
+
+Inspired by:
+
+All-in-One Memory: Process-Rewarded Reinforcement Learning for Memory Agents
+
+arXiv: 2610.21147
+
+https://arxiv.org/abs/2610.21147
+
+This project does not reproduce the full AiO-Mem training pipeline. It adopts
+selected architectural ideas—explicit evidence state, search/add/skip/stop
+actions, source traceability, process-level observability, and a reward
+interface—to evolve the memory server toward a learnable memory-policy
+architecture. No benchmark results from the paper are claimed as results of
+this project.
+
+## Verified Results
+
+Verified on the available synthetic datasets (not production benchmarks):
+
+- Synthetic CI dataset, threshold 0.0: Recall@5 = 1.000, MRR = 0.9375,
+  ADD precision = 0.75, ADD recall = 1.000, correct STOP = 1.000.
+- Realistic synthetic dataset, threshold 0.0: Recall@5 = 0.900, MRR = 0.900,
+  ADD precision = 0.6486, ADD recall = 0.900, correct STOP = 0.9167.
+- Realistic synthetic dataset, thresholds 0.1-0.6: Recall@5 = 0.900,
+  ADD precision = 0.90, ADD recall = 0.900.
+- Realistic synthetic dataset, thresholds 0.7-0.9: Recall@5 = 0.900,
+  ADD precision = 0.94, ADD recall = 0.900.
+
+Tests: 92 passed (excluding the environment-dependent multi-agent test).
+
+Default threshold remains `0.0`. No RL, DPO, or learned policy is implemented.
+
+## Evaluation
+
+The repository includes a policy-agnostic evaluation harness under `memory-api/evaluation`.
+
+Run:
+
+```powershell
+cd memory-api
+python -m evaluation.run --dataset evaluation/dataset.jsonl --memories evaluation/memories.jsonl --reset-index --baseline interaction --output evaluation/results
+```
+
+It reports retrieval, decision, trajectory, performance, and heuristic process-reward metrics. See `docs/evaluation.md`.
+
+### Current Evaluation Scope
+
+- Current policy is rule-based.
+- Process rewards are heuristic.
+- No RL is trained.
+- No DPO is performed.
+- No PA-DAPO is performed.
+- Evaluation infrastructure implemented; benchmark results pending for
+  production-scale data.
+
+## Evaluation Error Analysis and ADD Gating
+
+### Previous finding
+
+Initial comparison on the synthetic CI dataset:
+
+```text
+Existing Search Recall@5 = 1.000
+Interaction Recall@5    = 0.9375
+Interaction MRR         = 0.9375
+Interaction ADD Precision = 0.75
+Interaction ADD Recall    = 0.9375
+Correct STOP Rate         = 0.90
+```
+
+The Recall@5 difference was traced to duplicate-content suppression, not to
+retrieval failure, ADD recall failure, STOP failure, or query-generation
+failure. Example:
+
+```text
+mem_001 = "database port"
+mem_006 = "database port"
+```
+
+The interaction system retained one canonical memory and skipped the duplicate.
+This was an evaluation-semantics issue, not evidence that duplicate suppression
+should be disabled.
+
+### Canonical / Equivalent Memories
+
+Memory systems may contain multiple documents representing the same
+information. The evaluation layer supports canonicalization:
+
+```text
+canonical(mem_006) = mem_001
+```
+
+Retrieving either equivalent memory satisfies the information-level relevance
+requirement. This does not mean the storage layer physically merges documents.
+
+### ADD Precision/Recall
+
+```math
+\text{ADD Precision} =
+\frac{TP_{ADD}}{TP_{ADD} + FP_{ADD}}
+```
+
+```math
+\text{ADD Recall} =
+\frac{TP_{ADD}}{TP_{ADD} + FN_{ADD}}
+```
+
+Where TP = relevant candidate added, FP = irrelevant candidate added,
+FN = relevant candidate skipped.
+
+### Retrieval Metrics
+
+```math
+\text{Recall@K} =
+\frac{|R \cap Retrieved@K|}{|R|}
+```
+
+```math
+\text{Precision@K} =
+\frac{|R \cap Retrieved@K|}{|Retrieved@K|}
+```
+
+```math
+RR = \frac{1}{rank(first\ relevant\ memory)}
+```
+
+```math
+MRR = \frac{1}{N} \sum_{i=1}^{N} RR_i
+```
+
+```math
+NDCG@K = \frac{DCG@K}{IDCG@K}
+```
+
+Equivalent memory IDs are canonicalized before comparison.
+
+### Memory Decision Model
+
+```mermaid
+flowchart TD
+    Q[User Query] --> E[Evidence State]
+    E --> P[Memory Policy]
+
+    P --> S[SEARCH]
+    S --> R[Retrieval + Reranking]
+
+    R --> D{Duplicate?}
+    D -->|Yes| SK[SKIP]
+    D -->|No| G{Relevance Gate}
+
+    G -->|Score >= Threshold| A[ADD]
+    G -->|Score < Threshold| SK
+
+    A --> W[Working Memory]
+    SK --> P
+
+    W --> C{Evidence Sufficient?}
+    C -->|No| P
+    C -->|Yes| T[STOP]
+```
+
+### ADD Relevance Gating
+
+`MEMORY_ADD_RELEVANCE_THRESHOLD` (default `0.0`) gates ADD decisions. With
+threshold `0.0`, all non-duplicate candidates are added (compatibility mode).
+Higher thresholds require a minimum reranker/ES score before ADD.
+
+Score being thresholded: reranker score when available, otherwise Elasticsearch
+score. Score range depends on the reranker (observed roughly -1.4 to 7.6 for
+`bge-reranker-base`). `0.0` disables gating.
+
+### Threshold Trade-off
+
+Lower threshold: more ADD decisions, higher ADD recall, potentially lower ADD
+precision. Higher threshold: fewer ADD decisions, potentially higher ADD
+precision, potentially lower ADD recall and retrieval recall.
+
+Threshold sweep on the synthetic CI dataset:
+
+| Threshold | Recall@5 | MRR | ADD Precision | ADD Recall | Correct STOP |
+|---:|---:|---:|---:|---:|---:|
+| 0.0 | 1.000 | 0.9375 | 0.75 | 1.000 | 1.000 |
+| 0.1 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.2 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.3 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.4 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.5 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.6 | 0.900 | 0.9000 | 0.90 | 0.900 | 0.9167 |
+| 0.7 | 0.900 | 0.9000 | 0.94 | 0.900 | 0.9167 |
+| 0.8 | 0.900 | 0.9000 | 0.94 | 0.900 | 0.9167 |
+| 0.9 | 0.900 | 0.9000 | 0.94 | 0.900 | 0.9167 |
+
+After fixing missing reranker-score handling, positive thresholds no longer
+reduced Recall@5 on the available datasets, but they still depend on score
+scale and dataset size. No universal optimum was selected; the default remains
+`0.0` for compatibility. The threshold must be calibrated on larger,
+realistic data.
+
+### Current Research Position
+
+| Capability | Status |
+|---|---|
+| Evidence state | Implemented |
+| SEARCH action | Implemented |
+| ADD/SKIP action | Implemented |
+| STOP action | Implemented |
+| Trajectory logging | Implemented |
+| Provenance | Implemented |
+| Multi-view retrieval | Partial |
+| Duplicate/equivalent evaluation | Implemented in Phase 2A |
+| ADD relevance gating | Implemented in Phase 2A |
+| Process reward interface | Implemented |
+| Heuristic reward | Implemented |
+| Learned reward model | Not implemented |
+| DPO | Not implemented |
+| RL | Not implemented |
+| PA-DAPO | Not implemented |
+
+The current system is a deterministic research prototype and infrastructure
+foundation. It should not be described as implementing a learned memory policy
+or reinforcement learning.
+
+### Error Analysis Result
+
+- Recall loss was isolated to duplicate-content suppression.
+- Retrieval failures = 0.
+- ADD recall failures = 0.
+- STOP failures = 0 direct recall failures.
+- Policy query failures = 0.
+- Redundant search rate = 0.0.
+- Useful search rate = 0.9.
+- ADD precision weakness was caused by the absence of a relevance gate.
+- The project therefore chose evaluation normalization + ADD gating as the next
+  step instead of RL.
+
+Evaluation infrastructure implemented; benchmark results pending for
+production-scale data.
+
 ## 🧩 Embed in Your Chatbot (Python)
 
 You can give any chatbot long-term memory in two ways:

@@ -61,6 +61,18 @@ class MemoryInput(MemoryBase):
     importance: float = Field(default=0.5, ge=0, le=1)
     confidence: float = Field(default=1.0, ge=0, le=1)
     source: str | None = Field(default=None, max_length=256)
+    # Source traceability / provenance (optional, never fabricated)
+    source_type: str | None = Field(default=None, max_length=64)
+    source_id: str | None = Field(default=None, max_length=256)
+    source_reference: str | None = Field(default=None, max_length=1024)
+    source_span: str | None = Field(default=None, max_length=256)
+    created_from: str | None = Field(default=None, max_length=64)
+    provenance: dict[str, Any] | None = Field(default=None)
+    parent_memory_id: str | None = Field(default=None, max_length=128)
+    # Multi-view representation (optional; raw content is always available)
+    summary: str | None = Field(default=None, max_length=2000)
+    query_anchors: list[str] = Field(default_factory=list, max_length=32)
+    event_phrase: str | None = Field(default=None, max_length=500)
     tags: list[str] = Field(default_factory=list, max_length=32)
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: MemoryStatus = Field(default=MemoryStatus.active)
@@ -87,6 +99,16 @@ class MemoryUpdate(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     type: MemoryType | None = None
     source: str | None = Field(default=None, max_length=256)
+    source_type: str | None = Field(default=None, max_length=64)
+    source_id: str | None = Field(default=None, max_length=256)
+    source_reference: str | None = Field(default=None, max_length=1024)
+    source_span: str | None = Field(default=None, max_length=256)
+    created_from: str | None = Field(default=None, max_length=64)
+    provenance: dict[str, Any] | None = None
+    parent_memory_id: str | None = Field(default=None, max_length=128)
+    summary: str | None = Field(default=None, max_length=2000)
+    query_anchors: list[str] | None = Field(default=None, max_length=32)
+    event_phrase: str | None = Field(default=None, max_length=500)
     tags: list[str] | None = Field(default=None, max_length=32)
     metadata: dict[str, Any] | None = None
     status: MemoryStatus | None = None
@@ -130,6 +152,35 @@ class MemorySearch(BaseModel):
         return strip_bom(v) if isinstance(v, str) else v
 
 
+class MemoryInteractionRequest(BaseModel):
+    """Payload for POST /memories/interact."""
+
+    user_id: str = Field(default="", max_length=128)
+    tenant_id: str = Field(default="", max_length=128)
+    query: str = Field(min_length=1, max_length=1000)
+    agent_id: str | None = None
+    project_id: str | None = None
+    type: MemoryType | None = None
+    status: MemoryStatus | None = None
+    tags: list[str] | None = None
+    limit: int = Field(default=5, ge=1, le=50)
+    include_expired: bool = False
+    include_inactive: bool = False
+    mode: Literal["keyword", "semantic", "hybrid"] = "hybrid"
+    max_steps: int | None = Field(default=None, ge=1, le=20)
+    max_searches: int | None = Field(default=None, ge=1, le=20)
+    max_candidates: int | None = Field(default=None, ge=1, le=100)
+    timeout: float | None = Field(default=None, ge=1, le=300)
+    add_relevance_threshold: float | None = Field(default=None, ge=0, le=100)
+
+    @field_validator(
+        "user_id", "tenant_id", "agent_id", "project_id", "query", mode="before"
+    )
+    @classmethod
+    def _strip_text(cls, v: Any) -> Any:
+        return strip_bom(v) if isinstance(v, str) else v
+
+
 class MemoryRecord(BaseModel):
     """Canonical memory document as stored in Elasticsearch."""
 
@@ -143,6 +194,16 @@ class MemoryRecord(BaseModel):
     importance: float = 0.5
     confidence: float = 1.0
     source: str | None = None
+    source_type: str | None = None
+    source_id: str | None = None
+    source_reference: str | None = None
+    source_span: str | None = None
+    created_from: str | None = None
+    provenance: dict[str, Any] | None = None
+    parent_memory_id: str | None = None
+    summary: str | None = None
+    query_anchors: list[str] = Field(default_factory=list)
+    event_phrase: str | None = None
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     status: str = "active"

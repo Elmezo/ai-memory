@@ -289,6 +289,68 @@ def memory_search(
 
 
 @mcp.tool(
+    name="memory_interact",
+    title="Interact With Memories",
+    description=(
+        "Run an explicit evidence-state memory interaction (search/add/skip/stop) "
+        "within the caller's scope. Returns working memory plus a full trajectory. "
+        "Read-only with respect to stored data: it does not create or delete memories."
+    ),
+    annotations=_annotations(
+        "Interact With Memories", read_only=True, destructive=False, idempotent=True
+    ),
+)
+def memory_interact(
+    query: str,
+    user_id: str = "",
+    tenant_id: str = "",
+    agent_id: str | None = None,
+    project_id: str | None = None,
+    type: str | None = None,
+    status: str | None = None,
+    tags: list[str] | None = None,
+    limit: int = 5,
+    mode: str = "hybrid",
+    max_steps: int | None = None,
+    max_searches: int | None = None,
+    max_candidates: int | None = None,
+    add_relevance_threshold: float | None = None,
+) -> dict[str, Any]:
+    svc = get_service()
+    mem_type = None
+    if type:
+        try:
+            mem_type = MemoryType(type)
+        except ValueError:
+            pass
+    mem_status = None
+    if status:
+        try:
+            mem_status = MemoryStatus(status)
+        except ValueError:
+            pass
+    try:
+        return svc.interact(
+            query=query,
+            tenant_id=_scope_tenant(tenant_id),
+            user_id=_scope_user(user_id),
+            agent_id=_scope_agent(agent_id) if agent_id is not None else settings.MEMORY_AGENT_ID,
+            project_id=_scope_project(project_id) if project_id is not None else settings.MEMORY_PROJECT_ID,
+            mem_type=mem_type,
+            status=mem_status,
+            tags=tags,
+            limit=limit,
+            mode=mode,
+            max_steps=max_steps,
+            max_searches=max_searches,
+            max_candidates=max_candidates,
+            add_relevance_threshold=add_relevance_threshold,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {"error": str(exc)}
+
+
+@mcp.tool(
     name="memory_get",
     title="Get Memory",
     description=(
